@@ -11,6 +11,16 @@
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <item><widget class="QGroupBox" name="rewindGroup">
+    <property name="title"><string>Rewind</string></property>
+    <layout class="QFormLayout" name="rewindLayout">
+     <item row="0" column="1"><widget class="QCheckBox" name="rewindEnabled"><property name="text"><string>Enable rewind</string></property><property name="toolTip"><string>History is cleared on memory-card activity. Requires MTVU, achievements, recording and external devices to be disabled.</string></property></widget></item>
+     <item row="1" column="0"><widget class="QLabel" name="rewindIntervalLabel"><property name="text"><string>Checkpoint interval:</string></property><property name="buddy"><cstring>rewindInterval</cstring></property></widget></item>
+     <item row="1" column="1"><widget class="QSpinBox" name="rewindInterval"><property name="minimum"><number>16</number></property><property name="maximum"><number>2000</number></property><property name="suffix"><string> ms</string></property></widget></item>
+     <item row="2" column="0"><widget class="QLabel" name="rewindMemoryLabel"><property name="text"><string>Memory budget:</string></property><property name="buddy"><cstring>rewindMemory</cstring></property></widget></item>
+     <item row="2" column="1"><widget class="QSpinBox" name="rewindMemory"><property name="minimum"><number>128</number></property><property name="maximum"><number>4096</number></property><property name="suffix"><string> MiB</string></property></widget></item>
+    </layout>
+   </widget></item>
    <item>
     <widget class="QGroupBox" name="speedGroup">
      <property name="title">

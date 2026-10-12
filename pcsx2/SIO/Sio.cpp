@@ -8,6 +8,7 @@
 #include "Counters.h"
 
 #include "Host.h"
+#include "VMManager.h"
 #include "IconsPromptFont.h"
 
 #include <atomic>
@@ -141,6 +142,7 @@ void MemcardBusy::Decrement()
 
 void MemcardBusy::SetBusy()
 {
+	VMManager::NotifyRewindWrite();
 	currentBusyTicks.store(300, std::memory_order_release);
 	sioLastFrameMcdBusy = g_FrameCount;
 }

@@ -210,6 +210,10 @@ namespace VMManager
 	bool ShouldAllowPresentThrottle();
 
 	/// Runs the virtual machine for the specified number of video frames, and then automatically pauses.
+	void NotifyRewindWrite();
+	void InvalidateRewind();
+	void RewindStep();
+	void SetRewindHeld(bool held);
 	void FrameAdvance(u32 num_frames = 1);
 
 	/// Changes the disc in the virtual CD/DVD drive. Passing an empty will remove any current disc.

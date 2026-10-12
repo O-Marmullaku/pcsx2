@@ -440,6 +440,7 @@ s32 FileMemoryCard::Read(uint slot, u8* dest, u32 adr, int size)
 
 s32 FileMemoryCard::Save(uint slot, const u8* src, u32 adr, int size)
 {
+	VMManager::NotifyRewindWrite();
 	std::FILE* mcfp = m_file[slot];
 
 	if (!mcfp)
@@ -510,6 +511,7 @@ s32 FileMemoryCard::Save(uint slot, const u8* src, u32 adr, int size)
 
 s32 FileMemoryCard::EraseBlock(uint slot, u32 adr)
 {
+	VMManager::NotifyRewindWrite();
 	std::FILE* mcfp = m_file[slot];
 	if (!mcfp)
 	{

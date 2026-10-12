@@ -1996,6 +1996,11 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 {
 	SettingsWrapSection("EmuCore");
 
+	SettingsWrapEntry(RewindEnabled);
+	SettingsWrapEntry(RewindIntervalMs);
+	SettingsWrapEntry(RewindMemoryMiB);
+	RewindIntervalMs = std::clamp(RewindIntervalMs, 16, 2000);
+	RewindMemoryMiB = std::clamp(RewindMemoryMiB, 128, 4096);
 	SettingsWrapBitBool(CdvdVerboseReads);
 	SettingsWrapBitBool(CdvdDumpBlocks);
 	SettingsWrapBitBool(CdvdPrecache);

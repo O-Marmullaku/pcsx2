@@ -26,6 +26,9 @@
 #include "MTGS.h"
 #include "MTVU.h"
 #include "PINE.h"
+#include "SaveState.h"
+#include "RewindHistory.h"
+#include <chrono>
 #include "Patch.h"
 #include "PerformanceMetrics.h"
 #include "R3000A.h"
@@ -756,6 +759,7 @@ void VMManager::ApplyGameFixes()
 
 void VMManager::ApplySettings()
 {
+	InvalidateRewind();
 	Console.WriteLn("Applying settings...");
 
 	// If we're running, ensure the threads are synced.
@@ -1048,6 +1052,7 @@ bool VMManager::UpdateGameSettingsLayer()
 
 void VMManager::UpdateDiscDetails(bool booting)
 {
+	InvalidateRewind();
 	std::string memcardFilters;
 	{
 		// Only need to protect writes with the mutex.
@@ -1684,6 +1689,7 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 
 void VMManager::Shutdown(bool save_resume_state)
 {
+	InvalidateRewind();
 	// we'll probably already be stopping (this is how Qt calls shutdown),
 	// but just in case, so any of the stuff we call here knows we don't have a valid VM.
 	s_state.store(VMState::Stopping, std::memory_order_release);
@@ -1798,6 +1804,7 @@ bool VMManager::RequestReset()
 
 void VMManager::Reset()
 {
+	InvalidateRewind();
 	pxAssert(HasValidVM());
 
 	// If we're running, we're probably going to be executing this at event test time,
@@ -1930,6 +1937,7 @@ std::string VMManager::GetCurrentSaveStateFileName(s32 slot, bool backup)
 
 bool VMManager::DoLoadState(const char* filename, Error* error)
 {
+	InvalidateRewind();
 	if (GSDumpReplayer::IsReplayingDump())
 	{
 		Error::SetString(error, TRANSLATE_STR("VMManager", "Cannot load state while replaying a GS dump."));
@@ -2370,6 +2378,7 @@ void VMManager::FrameAdvance(u32 num_frames /*= 1*/)
 
 bool VMManager::ChangeDisc(CDVD_SourceType source, std::string path)
 {
+	InvalidateRewind();
 	const CDVD_SourceType old_type = CDVDsys_GetSourceType();
 	const std::string old_path(CDVDsys_GetFile(old_type));
 
@@ -2784,8 +2793,161 @@ void VMManager::Internal::ClearCPUExecutionCaches()
 	}
 }
 
+namespace
+{
+	using RewindClock = std::chrono::steady_clock;
+	RewindHistory s_rewind_history;
+	std::atomic<bool> s_rewind_write{false};
+	bool s_rewind_held = false;
+	bool s_rewind_step = false;
+	bool s_rewind_capture = false;
+	u32 s_rewind_frames = 0;
+	RewindClock::time_point s_rewind_next_step{};
+
+	bool CanRewind()
+	{
+		// External devices and MTVU are excluded until their state/write semantics are verified.
+		return !s_rewind_write.load(std::memory_order_acquire) && VMManager::HasValidVM() && EmuConfig.RewindEnabled && !THREAD_VU1 &&
+		       !Achievements::IsActive() && !Achievements::IsHardcoreModeActive() &&
+		       !g_InputRecording.isActive() && !GSDumpReplayer::IsReplayingDump() &&
+		       !EmuConfig.DEV9.EthEnable && !EmuConfig.DEV9.HddEnable && !EmuConfig.HostFs &&
+		       EmuConfig.USB.Ports[0].DeviceType < 0 && EmuConfig.USB.Ports[1].DeviceType < 0 &&
+		       !MemcardBusy::IsBusy();
+	}
+
+	void ProcessRewindImpl()
+	{
+		if (!CanRewind())
+		{
+			VMManager::InvalidateRewind();
+			return;
+		}
+		if (s_rewind_step || s_rewind_held)
+		{
+			s_rewind_capture = false;
+			if (RewindClock::now() < s_rewind_next_step && !s_rewind_step)
+				return;
+			s_rewind_step = false;
+			s_rewind_next_step = RewindClock::now() + std::chrono::milliseconds(100);
+			if (s_rewind_history.Empty())
+			{
+				Host::AddOSDMessage("No earlier rewind checkpoint.", 1.0f);
+				return;
+			}
+			// Pop before restoring: a failed restore/reset may invalidate the remaining history.
+			auto state = s_rewind_history.Pop();
+			Error error;
+			GSCapture::FlushAudioOnly();
+			const auto start = RewindClock::now();
+			if (!SaveState_RestoreMemory(*state, &error))
+			{
+				VMManager::InvalidateRewind();
+				Host::AddOSDMessage(error.GetDescription(), 5.0f);
+				return;
+			}
+			Console.WriteLn("Rewind restore: %.3f ms", std::chrono::duration<double, std::milli>(RewindClock::now() - start).count());
+			MTGS::PresentCurrentFrame();
+			Host::AddOSDMessage("Rewinding", 0.5f);
+			s_rewind_frames = 0;
+			VMManager::ResetFrameLimiter();
+			return;
+		}
+		if (!std::exchange(s_rewind_capture, false))
+			return;
+		const size_t budget = static_cast<size_t>(EmuConfig.RewindMemoryMiB) * 1024 * 1024;
+		s_rewind_history.Prepare(budget);
+		Error error;
+		const auto start = RewindClock::now();
+		auto snapshot = SaveState_DownloadState(&error, true);
+		const size_t snapshot_bytes = snapshot ? snapshot->GetMemoryUsage() : 0;
+		if (!s_rewind_history.Push(std::move(snapshot), budget))
+		{
+			VMManager::InvalidateRewind();
+			EmuConfig.RewindEnabled = false;
+			Host::AddOSDMessage("Rewind disabled: checkpoint exceeded its memory limit.", 5.0f);
+			return;
+		}
+		Console.WriteLn("Rewind capture: %.3f ms, %zu bytes", std::chrono::duration<double, std::milli>(RewindClock::now() - start).count(), snapshot_bytes);
+	}
+} // namespace
+
+void VMManager::NotifyRewindWrite()
+{
+	s_rewind_write.store(true, std::memory_order_release);
+}
+
+static void ProcessRewind()
+{
+	try
+	{
+		ProcessRewindImpl();
+	}
+	catch (const std::bad_alloc&)
+	{
+		VMManager::InvalidateRewind();
+		EmuConfig.RewindEnabled = false;
+		Host::AddOSDMessage("Rewind disabled: not enough memory.", 5.0f);
+	}
+}
+
+void VMManager::InvalidateRewind()
+{
+	s_rewind_write.store(false, std::memory_order_release);
+	s_rewind_history.Clear();
+	s_rewind_capture = false;
+	s_rewind_step = false;
+	if (s_rewind_held && HasValidVM())
+		SPU2::SetOutputPaused(GetState() != VMState::Running);
+	s_rewind_held = false;
+	s_rewind_frames = 0;
+}
+
+void VMManager::RewindStep()
+{
+	if (!CanRewind())
+	{
+		Host::AddOSDMessage("Rewind unavailable: enable it in Emulation settings and disable recording, achievements, MTVU and external devices. Memory-card activity must finish first.", 5.0f);
+		return;
+	}
+	s_rewind_step = true;
+	if (GetState() == VMState::Paused)
+		ProcessRewind();
+	else
+		Cpu->ExitExecution();
+}
+
+void VMManager::SetRewindHeld(bool held)
+{
+	if (!HasValidVM())
+		return;
+	if (held && !CanRewind())
+	{
+		RewindStep();
+		return;
+	}
+	s_rewind_held = held;
+	SPU2::SetOutputPaused(held || GetState() != VMState::Running);
+	if (held)
+		RewindStep();
+	else
+		ResetFrameLimiter();
+}
+
 void VMManager::Execute()
 {
+	if (s_rewind_held)
+	{
+		Host::PumpMessagesOnCPUThread();
+		InputManager::PollSources();
+		ProcessRewind();
+		Threading::Sleep(5);
+		return;
+	}
+	if (s_rewind_step)
+	{
+		ProcessRewind();
+		return;
+	}
 	// Check for interpreter<->recompiler switches.
 	if (std::exchange(s_cpu_implementation_changed, false))
 	{
@@ -2797,10 +2959,13 @@ void VMManager::Execute()
 
 	// Execute until we're asked to stop.
 	Cpu->Execute();
+	ProcessRewind();
 }
 
 void VMManager::IdlePollUpdate()
 {
+	if (s_rewind_held && GetState() == VMState::Paused)
+		ProcessRewind();
 	Achievements::IdleUpdate();
 
 	PollDiscordPresence();
@@ -2944,6 +3109,17 @@ void VMManager::Internal::EntryPointCompilingOnCPUThread()
 
 void VMManager::Internal::VSyncOnCPUThread()
 {
+	if (EmuConfig.RewindEnabled)
+	{
+		if (!CanRewind())
+			InvalidateRewind();
+		else if (++s_rewind_frames >= static_cast<u32>(std::max(1.0, std::ceil(GetVerticalFrequency() * EmuConfig.RewindIntervalMs / 1000.0))))
+		{
+			s_rewind_frames = 0;
+			s_rewind_capture = true;
+			Cpu->ExitExecution();
+		}
+	}
 	Pad::UpdateMacroButtons();
 
 	Patch::ApplyVsyncPatches();

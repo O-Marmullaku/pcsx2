@@ -23,6 +23,9 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsWindow* settings_dialog
 	SettingsInterface* sif = dialog()->getSettingsInterface();
 
 	setupTab(m_ui);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.rewindEnabled, "EmuCore", "RewindEnabled", false);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.rewindInterval, "EmuCore", "RewindIntervalMs", 1000);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.rewindMemory, "EmuCore", "RewindMemoryMiB", 512);
 
 	initializeSpeedCombo(m_ui.normalSpeed, "Framerate", "NominalScalar", 1.0f);
 	initializeSpeedCombo(m_ui.fastForwardSpeed, "Framerate", "TurboScalar", 2.0f);

@@ -1,3 +1,4 @@
+#include "VMManager.h"
 // SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
@@ -1022,6 +1023,7 @@ void FolderMemoryCard::ReadDataWithoutCache(u8* const dest, const u32 adr, const
 
 s32 FolderMemoryCard::Save(const u8* src, u32 adr, int size)
 {
+	VMManager::NotifyRewindWrite();
 	//const u32 block = adr / BlockSizeRaw;
 	//const u32 cluster = adr / ClusterSizeRaw;
 	const u32 page = adr / PageSizeRaw;

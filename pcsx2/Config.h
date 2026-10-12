@@ -1385,6 +1385,9 @@ struct Pcsx2Config
 	GamefixOptions Gamefixes;
 	ProfilerOptions Profiler;
 	DebugAnalysisOptions DebuggerAnalysis;
+	bool RewindEnabled = false;
+	int RewindIntervalMs = 1000;
+	int RewindMemoryMiB = 512;
 	EmulationSpeedOptions EmulationSpeed;
 	SavestateOptions Savestate;
 	SPU2Options SPU2;

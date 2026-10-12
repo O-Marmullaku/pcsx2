@@ -148,6 +148,10 @@ static bool UseSavestateSelector()
 }
 
 BEGIN_HOTKEY_LIST(g_common_hotkeys)
+DEFINE_HOTKEY("RewindStep", TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLATE_NOOP("Hotkeys", "Rewind One Checkpoint"),
+	[](s32 pressed) { if (pressed == 0) VMManager::RewindStep(); })
+DEFINE_HOTKEY("RewindHold", TRANSLATE_NOOP("Hotkeys", "Save States"), TRANSLATE_NOOP("Hotkeys", "Hold to Rewind"),
+	[](s32 pressed) { VMManager::SetRewindHeld(pressed > 0); })
 DEFINE_HOTKEY("ToggleFullscreen", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLATE_NOOP("Hotkeys", "Toggle Fullscreen"),
 	[](s32 pressed) {
 		if (!pressed)

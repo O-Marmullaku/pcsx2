@@ -255,6 +255,7 @@ static void cdvdReadNVM(u8* dst, int offset, int bytes)
 
 static void cdvdWriteNVM(const u8* src, int offset, int bytes)
 {
+	VMManager::NotifyRewindWrite();
 	int to_write = bytes;
 	if (static_cast<size_t>(offset + bytes) > sizeof(s_nvram)) [[unlikely]]
 	{

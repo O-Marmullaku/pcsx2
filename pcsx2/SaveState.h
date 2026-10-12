@@ -4,6 +4,7 @@
 #pragma once
 
 #include <deque>
+#include <span>
 #include <memory>
 #include <optional>
 #include <string>
@@ -52,12 +53,13 @@ class ArchiveEntryList;
 
 // Wrappers to generate a save state compatible across all frontends.
 // These functions assume that the caller has paused the core thread.
-extern std::unique_ptr<ArchiveEntryList> SaveState_DownloadState(Error* error);
+extern std::unique_ptr<ArchiveEntryList> SaveState_DownloadState(Error* error, bool bounded = false);
 extern std::unique_ptr<SaveStateScreenshotData> SaveState_SaveScreenshot();
 extern bool SaveState_ZipToDisk(
 	std::unique_ptr<ArchiveEntryList> srclist, std::unique_ptr<SaveStateScreenshotData> screenshot,
 	const char* filename, Error* error);
 extern bool SaveState_ReadScreenshot(const std::string& filename, u32* out_width, u32* out_height, std::vector<u32>* out_pixels);
+extern bool SaveState_RestoreMemory(ArchiveEntryList& state, Error* error);
 extern bool SaveState_UnzipFromDisk(const std::string& filename, Error* error);
 
 // --------------------------------------------------------------------------------------
@@ -78,12 +80,15 @@ protected:
 
 	int m_idx = 0;			// current read/write index of the allocation
 
+	bool m_bounded = false;
 	bool m_error = false; // error occurred while reading/writing
 
 public:
 	SaveStateBase(VmStateBuffer& memblock);
 	virtual ~SaveStateBase() = default;
 
+	bool IsBounded() const { return m_bounded; }
+	size_t GetRemainingSize() const { return m_memory.size() - m_idx; }
 	__fi bool HasError() const { return m_error; }
 	__fi bool IsOkay() const { return !m_error; }
 
@@ -122,27 +127,10 @@ public:
 		u32 count = static_cast<u32>(q.size());
 		Freeze(count);
 
-		// have to use a temp array, because deque doesn't have a contiguous block of memory
-		std::unique_ptr<T[]> temp;
-		if (count > 0)
-		{
-			temp = std::make_unique<T[]>(count);
-			if (IsSaving())
-			{
-				u32 pos = 0;
-				for (const T& it : q)
-					temp[pos++] = it;
-			}
-
-			FreezeMem(temp.get(), static_cast<int>(sizeof(T) * count));
-		}
-
 		if (IsLoading())
-		{
-			q.clear();
-			for (u32 i = 0; i < count; i++)
-				q.push_back(temp[i]);
-		}
+			q.resize(count);
+		for (T& item : q)
+			Freeze(item);
 	}
 
 	void FreezeString(std::string& s)
@@ -315,6 +303,14 @@ public:
 		return *this;
 	}
 
+	size_t GetMemoryUsage() const
+	{
+		size_t size = sizeof(*this) + m_data.capacity() + m_list.capacity() * sizeof(ArchiveEntry);
+		for (const auto& entry : m_list)
+			size += entry.GetFilename().capacity() + 1;
+		return size;
+	}
+
 	size_t GetLength() const
 	{
 		return m_list.size();
@@ -340,7 +336,7 @@ class memSavingState final : public SaveStateBase
 	typedef SaveStateBase _parent;
 
 public:
-	memSavingState(VmStateBuffer& save_to);
+	memSavingState(VmStateBuffer& save_to, bool bounded = false);
 	~memSavingState() override = default;
 
 	void FreezeMem(void* data, int size) override;
@@ -351,6 +347,7 @@ class memLoadingState final : public SaveStateBase
 {
 public:
 	memLoadingState(const VmStateBuffer& load_from);
+	memLoadingState(const VmStateBuffer& load_from, size_t offset);
 	~memLoadingState() override = default;
 
 	void FreezeMem(void* data, int size) override;
