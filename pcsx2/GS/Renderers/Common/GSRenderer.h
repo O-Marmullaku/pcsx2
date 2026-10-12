@@ -27,6 +27,7 @@ private:
 
 protected:
 	GSVector2i m_real_size{0, 0};
+	bool m_rebuilding_current_frame = false;
 
 	virtual GSTexture* GetOutput(int i, float& scale, int& y_offset) = 0;
 	virtual GSTexture* GetFeedbackOutput(float& scale) { return nullptr; }
@@ -61,6 +62,7 @@ public:
 	void DumpSavedMetrics();
 	bool IsSavingMetrics();
 	void PresentCurrentFrame();
+	void RebuildCurrentFrame();
 	bool BeginCapture(std::string filename, const GSVector2i& size = GSVector2i(0, 0));
 	void EndCapture();
 };

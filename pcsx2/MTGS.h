@@ -53,6 +53,8 @@ namespace MTGS
 	/// Re-presents the current frame. Call when things like window resizes happen to re-display
 	/// the current frame with the correct proportions. Should only be called from the CPU thread.
 	void PresentCurrentFrame();
+	/// Rebuilds and presents the restored GS frame without advancing emulation.
+	void RebuildCurrentFrame();
 
 	/// Waits for the GS to empty out the entire ring buffer contents.
 	void WaitGS(bool syncRegs = true, bool weakWait = false, bool isMTVU = false);

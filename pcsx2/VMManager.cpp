@@ -2846,7 +2846,7 @@ namespace
 				return;
 			}
 			Console.WriteLn("Rewind restore: %.3f ms", std::chrono::duration<double, std::milli>(RewindClock::now() - start).count());
-			MTGS::PresentCurrentFrame();
+			MTGS::RebuildCurrentFrame();
 			Host::AddOSDMessage("Rewinding", 0.5f);
 			s_rewind_frames = 0;
 			VMManager::ResetFrameLimiter();
@@ -2858,6 +2858,9 @@ namespace
 		s_rewind_history.Prepare(budget);
 		Error error;
 		const auto start = RewindClock::now();
+		// The checkpoint serializes GS local memory, so read back GPU-only framebuffer data first.
+		MTGS::RunOnGSThread(GSReadbackLocalMemory);
+		MTGS::WaitGS(false, false, false);
 		auto snapshot = SaveState_DownloadState(&error, true);
 		const size_t snapshot_bytes = snapshot ? snapshot->GetMemoryUsage() : 0;
 		if (!s_rewind_history.Push(std::move(snapshot), budget))

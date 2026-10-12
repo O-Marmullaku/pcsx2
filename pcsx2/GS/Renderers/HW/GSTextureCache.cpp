@@ -3965,7 +3965,7 @@ bool GSTextureCache::PreloadTarget(GIFRegTEX0 TEX0, const GSVector2i& size, cons
 	return hw_clear.value_or(false);
 }
 
-GSTextureCache::Target* GSTextureCache::LookupDisplayTarget(GIFRegTEX0 TEX0, const GSVector2i& size, float scale, bool is_feedback)
+GSTextureCache::Target* GSTextureCache::LookupDisplayTarget(GIFRegTEX0 TEX0, const GSVector2i& size, float scale, bool allow_create_from_local_memory)
 {
 	const u32 bp = TEX0.TBP0;
 
@@ -4111,12 +4111,12 @@ GSTextureCache::Target* GSTextureCache::LookupDisplayTarget(GIFRegTEX0 TEX0, con
 
 	// Didn't find a target, check if the frame was uploaded.
 
-	bool can_create = is_feedback;
+	bool can_create = allow_create_from_local_memory;
 	bool exact_match = false;
 	u32 exact_match_psm = 0;
 	GSVector2i new_size = size;
 
-	if (!is_feedback && GSRendererHW::GetInstance()->m_draw_transfers.size() > 0)
+	if (!allow_create_from_local_memory && GSRendererHW::GetInstance()->m_draw_transfers.size() > 0)
 	{
 		const GSVector4i newrect = GSVector4i::loadh(size);
 		const u32 rect_end = GSLocalMemory::GetUnwrappedEndBlockAddress(TEX0.TBP0, TEX0.TBW, TEX0.PSM, newrect);

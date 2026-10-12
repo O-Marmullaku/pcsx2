@@ -1042,6 +1042,13 @@ void MTGS::PresentCurrentFrame()
 	});
 }
 
+void MTGS::RebuildCurrentFrame()
+{
+	RunOnGSThread([]() {
+		GSRebuildCurrentFrame();
+	});
+}
+
 void MTGS::SetRunIdle(bool enabled)
 {
 	// NOTE: Should only be called on the GS thread.

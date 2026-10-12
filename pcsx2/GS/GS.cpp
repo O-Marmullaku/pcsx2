@@ -454,6 +454,29 @@ void GSvsync(u32 field, bool registers_written)
 	g_gs_renderer->VSync(field, registers_written, g_gs_renderer->IsIdleFrame());
 }
 
+void GSRebuildCurrentFrame()
+{
+	// GSfreeze() clears the current texture before loading a state. Rebuild the
+	// display from restored GS memory/registers without advancing normal VSync
+	// bookkeeping or delivering a duplicate frame to video capture.
+	g_gs_renderer->PCRTCDisplays.SetVideoMode(g_gs_renderer->GetVideoMode());
+	g_gs_renderer->PCRTCDisplays.EnableDisplays(g_gs_renderer->m_regs->PMODE, g_gs_renderer->m_regs->SMODE2, g_gs_renderer->isReallyInterlaced());
+	g_gs_renderer->PCRTCDisplays.SetRects(0, g_gs_renderer->m_regs->DISP[0].DISPLAY, g_gs_renderer->m_regs->DISP[0].DISPFB);
+	g_gs_renderer->PCRTCDisplays.SetRects(1, g_gs_renderer->m_regs->DISP[1].DISPLAY, g_gs_renderer->m_regs->DISP[1].DISPFB);
+	g_gs_renderer->PCRTCDisplays.CheckSameSource();
+	g_gs_renderer->PCRTCDisplays.CalculateDisplayOffset(g_gs_renderer->m_scanmask_used);
+	g_gs_renderer->PCRTCDisplays.CalculateFramebufferOffset(g_gs_renderer->m_scanmask_used, g_gs_renderer->m_regs->DISP[0].DISPFB, g_gs_renderer->m_regs->DISP[1].DISPFB);
+	g_gs_renderer->Flush(GSState::VSYNC);
+	g_gs_renderer->RebuildCurrentFrame();
+}
+
+void GSReadbackLocalMemory()
+{
+	// HW render targets can contain newer framebuffer pixels than serialized GS local memory.
+	if (g_texture_cache)
+		g_texture_cache->ReadbackAll();
+}
+
 int GSfreeze(FreezeAction mode, freezeData* data)
 {
 	if (mode == FreezeAction::Save)

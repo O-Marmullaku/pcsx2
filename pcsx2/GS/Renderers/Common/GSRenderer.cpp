@@ -1008,6 +1008,16 @@ void GSRenderer::PresentCurrentFrame()
 	}
 }
 
+void GSRenderer::RebuildCurrentFrame()
+{
+	const bool was_rebuilding = m_rebuilding_current_frame;
+	m_rebuilding_current_frame = true;
+	const u32 field = (m_regs->CSR.U32[1] & 0x2000) ? 0 : 1;
+	Merge(field);
+	m_rebuilding_current_frame = was_rebuilding;
+	PresentCurrentFrame();
+}
+
 void GSTranslateWindowToDisplayCoordinates(float window_x, float window_y, float* display_x, float* display_y)
 {
 	const float draw_width = s_last_draw_rect.z - s_last_draw_rect.x;
